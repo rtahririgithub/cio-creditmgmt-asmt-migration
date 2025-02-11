@@ -1,0 +1,95 @@
+# We use Skaffold because it's nice... but mostly because it's required to use Google Cloud Deploy.
+# See https://cloud.google.com/deploy/docs/using-skaffold for more information.
+
+# Skaffold is a tool that handles building, pushing, and deploying your application. The intent is to make it simple
+# for you to run your application locally on Kubernetes in a way that mirrors your actual deployment environment in the cloud.
+# See skaffold.dev/docs/ for more information.
+# run `skaffold init` at the root of your project directory to walk through a wizard that will help you generate this file.
+# run `skaffold dev` locally, and skaffold will run your app and sync any changes you make as you continue developing.
+apiVersion: skaffold/v2beta26
+kind: Config
+# Define how you want your image to be built. A local build is the default execution context, and Skaffold will use your 
+# locally-installed build tools to execute the build. In CDO, we commonly use Docker to build; you must have Docker
+# installed on your machine for this. See https://skaffold.dev/docs/pipeline-stages/builders/docker/ for more info.
+metadata:
+  name: creditmgmt-asmt-migt-svc
+build:
+    tagPolicy:
+        gitCommit:
+            ignoreChanges: true
+    artifacts:
+        # name of the image to be built.
+        - image: northamerica-northeast1-docker.pkg.dev/cio-gke-devops-e4993356/applications/cio-creditmgmt/creditmgmt-asmt-migt-svc
+          docker:
+            cacheFrom:
+            # Local Docker builder replaces cache references to the artifact image with
+            # the tagged image reference, useful for caching from the previous build.
+            - northamerica-northeast1-docker.pkg.dev/cio-gke-devops-e4993356/applications/cio-creditmgmt/creditmgmt-asmt-migt-svc
+# Define how you want your image to be deployed to Kubernetes. In CDO, we commonly use Helm to manage Kubernetes; you must
+# have Helm installed on your machine for this. See https://skaffold.dev/docs/pipeline-stages/deployers/helm/ for more info.
+# Here, we are using the TELUS CDO standard Helm chart, which must already exist in the container where Skaffold is being executed.
+# We do this in our GitHub workflow with a step to copy the Helm chart into the container where Skaffold is being executed.
+# See https://github.com/telus/unicorn-run-frontend/blob/main/.github/workflows/cloud-deploy.yaml line 67.
+# This is due to a bug with Google Cloud Deploy where it is not able to reference the chart hosted in Google Artifact Registry.
+deploy:
+  helm:
+    releases:
+      - name: creditmgmt-asmt-migt-svc
+        namespace: cio-creditmgmt
+        recreatePods: false
+        useHelmSecrets: false
+        wait: false
+        artifactOverrides:
+          image: cio-creditmgmt/creditmgmt-asmt-migt-svc
+        valuesFiles:
+          - helm/creditmgmt-asmt-migt-svc-np.yaml
+        remoteChart: "oci://northamerica-northeast1-docker.pkg.dev/cio-gke-devops-e4993356/charts/cio-gke-deployment"
+        version: 1.5.0
+        imageStrategy:
+          helm: {}
+
+# Skaffold profiles can define the different contexts where your application will run. The values defined here will be combined with the defaults
+# configured above, where values set in the profiles will override. You can set automatic activation criteria where, if the current environmet
+# where skaffold is running meets those criteria, the corresponding profile will be used. You can also specify which profile you want to use
+# directly in your skaffold command with `-p <PROFILENAME>`
+profiles:
+  - name: np
+    patches:
+      - op: replace
+        path: /deploy/helm/releases/0/valuesFiles
+        value: [ helm/creditmgmt-asmt-migt-svc-np.yaml ]
+  - name: it01-np
+    patches:
+      - op: replace
+        path: /deploy/helm/releases/0/valuesFiles
+        value: [ helm/creditmgmt-asmt-migt-svc-it01-np.yaml ]  
+  - name: it02-np
+    patches:
+      - op: replace
+        path: /deploy/helm/releases/0/valuesFiles
+        value: [ helm/creditmgmt-asmt-migt-svc-it02-np.yaml ]
+  - name: it03-np
+    patches:
+      - op: replace
+        path: /deploy/helm/releases/0/valuesFiles
+        value: [ helm/creditmgmt-asmt-migt-svc-it03-np.yaml ]                      
+  - name: it04-np
+    patches:
+      - op: replace
+        path: /deploy/helm/releases/0/valuesFiles
+        value: [ helm/creditmgmt-asmt-migt-svc-it04-np.yaml ]
+  # Uncomment this if you want to add more environments
+  # take into account the fact that you will need a different values file with the exact name
+  # and they should have a match in the clouddeploy.yaml file
+  # below is an example
+  # - name: it01
+  #   patches:
+  #     - op: replace
+  #       path: /deploy/helm/releases/0/valuesFiles
+  #       value: [helm/creditmgmt-asmt-migt-svc-it01.yaml]
+  - name: pr
+    patches:
+      - op: replace
+        path: /deploy/helm/releases/0/valuesFiles
+        value: [ helm/creditmgmt-asmt-migt-svc-pr.yaml ]
+  

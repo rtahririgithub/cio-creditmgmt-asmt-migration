@@ -1,0 +1,50 @@
+
+name: Reusable Pass for SonarQube Scan
+
+on:
+  workflow_call:
+    secrets:
+      gh_idp_project_id:
+        required: true
+      cdo_eptools_helper_project_id:
+        required: true      
+
+jobs:
+  prepare_job:
+    if: ${{ !(contains(github.event.head_commit.message, 'initial commit') ||  contains(github.event.head_commit.message, 'Update cookiecutter.yaml')) }}
+    runs-on: ubuntu-latest
+      
+    steps:
+      - id: 'auth'
+        uses: google-github-actions/auth@v0
+        with:
+          token_format: 'access_token'
+          workload_identity_provider: "projects/${{ secrets.gh_idp_project_id }}/locations/global/workloadIdentityPools/cdo-github-wif/providers/cdo-github-provider"
+          service_account: 'sar-sq-gh-token@cdo-eptools-helper-np-b4c0da.iam.gserviceaccount.com'
+          id_token_audience: "//iam.googleapis.com/projects/${{ secrets.gh_idp_project_id }}/locations/global/workloadIdentityPools/cdo-github-wif/providers/cdo-github-provider"
+          audience: "//iam.googleapis.com/projects/${{ secrets.gh_idp_project_id }}/locations/global/workloadIdentityPools/cdo-github-wif/providers/cdo-github-provider"
+          access_token_lifetime: '300s'
+          create_credentials_file: false
+          
+      - id: 'access_pass'
+        run: |-
+          SECRET_VALUE=$(curl https://secretmanager.googleapis.com/v1/projects/${{ secrets.cdo_eptools_helper_project_id }}/secrets/sq-gh-token/versions/latest:access \
+            --header "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
+            | jq -r ".payload.data" | base64 --decode)
+          echo ::add-mask::$SECRET_VALUE            
+          echo ::set-output name=secretvalue::$SECRET_VALUE
+      - id: 'save'
+        run: |-
+          VAR_FOLDER="tmp_$GITHUB_RUN_ID"
+          rm -rf $VAR_FOLDER
+          mkdir $VAR_FOLDER
+          echo "${{ steps.access_pass.outputs.secretvalue }}" > $VAR_FOLDER/latest.txt
+          echo ::set-output name=path::$VAR_FOLDER          
+      - uses: actions/upload-artifact@master
+        with:
+          name: latest
+          path: ${{ steps.save.outputs.path }}
+
+      - name: Clean up
+        run: rm -rf ${{ steps.save.outputs.path }}   
+ 

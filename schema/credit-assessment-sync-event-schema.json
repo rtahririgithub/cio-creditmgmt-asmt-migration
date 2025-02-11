@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "$id": "credit-assessment-sync-event-schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "CreditAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "customerId": {
+          "type": "string"
+        },
+        "creditProfileId": {
+          "type": "string"
+        },
+        "creditAssessmentId": {
+          "type": "string"
+        },
+        "creditAssessmentTimestamp": {
+          "type": "string"
+        },
+        "creditAssessmentTypeCd": {
+          "type": "string"
+        },
+        "creditAssessmentSubTypeCd": {
+          "type": "string"
+        },
+        "creditAssessmentResultCd": {
+          "type": "string"
+        },
+        "creditAssessmentResultReasonCd": {
+          "type": "string"
+        },
+        "assessmentMessageCd": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "createdTimestamp": {
+          "type": "string"
+        },
+        "updatedBy": {
+          "type": "string"
+        },
+        "updatedTimestamp": {
+          "type": "string"
+        },
+        "originatorAppId": {
+          "type": "string"
+        },
+        "channelOrgId": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "properties": {
+    "eventId": {
+      "type": "string"
+    },
+    "eventType": {
+      "type": "string"
+    },
+    "eventTime": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "event": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/CreditAssessment"
+      }
+    }
+  }
+}

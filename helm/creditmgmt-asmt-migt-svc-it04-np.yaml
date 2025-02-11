@@ -1,0 +1,300 @@
+# Default values for helm-chart.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+applicationName: creditmgmt-asmt-migt-svc
+environment: it04-np
+replicas: 1
+namespace: cio-creditmgmt
+
+type: deployment
+
+multiclusterservice:
+  enabled: false
+
+# The only use of job_purpose attribute it to define if it is a special job
+# one of values secrets_sync
+job_purpose: ""
+
+#containerPort: 8090
+
+#set to true if deploying to openshift and want a route created
+openshift:
+  enabled: false
+
+#TELUS Labels/Annotations
+telus:
+  cmdbId: "16973"
+  costCentre: "27105"
+  organization: "CreditAndCollections"
+  mailingList: "reza.tahriri@telus.com"
+
+## Configure Pods Security Context
+## ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod
+## @param podSecurityContext.enabled Enabled Deployment&trade; pods' Security Context
+## @param podSecurityContext.fsGroup Set Deployment&trade; pod's Security Context fsGroup
+##
+podSecurityContext:
+  enabled: true
+  fsGroup: 1001
+  runAsGroup: 1001
+  runAsUser: 1001
+  supplementalGroups:
+  - 1001
+
+## Configure Container Security Context
+## ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod
+## @param containerSecurityContext.enabled Enabled Deployment&trade; containers' Security Context
+## @param containerSecurityContext.runAsUser Set Deployment&trade; containers' Security Context runAsUser
+##
+containerSecurityContext:
+  enabled: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - NET_RAW
+  runAsGroup: 1001
+  runAsUser: 1001
+
+## Configure DNS config
+## ref: https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/#pod-dns-config
+## @param dnsConfig.enabled Enabled Deployment&trade; pods' DNS config
+## @param dnsConfig.searches Set Deployment&trade; pods' DNS config search suffixes
+##
+dnsConfig:
+  enabled: false
+  searches:
+  - corp.ads
+
+# Allows you set arbitrary env variables.
+extraEnvs:
+  - name: ENV
+    value: STAGING-NP
+  - name: SPRING_PROFILES_ACTIVE
+    value: cloud-it04
+  - name: GOOGLE_CLOUD_PROJECT
+    value: cio-creditmgmt-np-15dfbe
+#extraEnvs:
+#  - name: envname
+#    value: envvalue
+#  - name: envname2
+#    value: envvalue2
+
+# Custom entries in /etc/hosts
+#hostAliases:
+#  - ip: "10.92.4.10"
+#    hostnames:
+#    - "tess-broker-zookeeper-0-pr"
+#  - ip: "10.92.4.11"
+#    hostnames:
+#    - "tess-broker-zookeeper-1-pr"
+#  - ip: "10.92.4.12"
+#    hostnames:
+#    - "tess-broker-zookeeper-2-pr"
+
+envFrom: []
+# envFrom:
+#   - secretRef:
+#       name: test-secret
+#   - configMapRef:
+#       name: special-config
+
+# Allows you to add any config files and specify a path location in the volumeMounts
+# such as application.yaml or log4j2.properties.  Since this is clear in src control
+# please do no use for sensitive data such as keys and passwords.  See Secrets.
+# configmaps:
+#   key:
+#     properties:
+#       key: "value"
+#       key2: "value"
+#   file:
+#     application.yaml: |
+#       key:
+#         nestedkey: value
+#     log4j2.properties: |
+#       key = value
+
+initContainers: |
+#  - name: init-myservice
+#    image: busybox:1.28
+#    command: ['sh', '-c', "until nslookup myservice.$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace).svc.cluster.local; do echo waiting for myservice; sleep 2; done"]
+#  - name: init-mydb
+#    image: busybox:1.28
+#    command: ['sh', '-c', "until nslookup mydb.$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace).svc.cluster.local; do echo waiting for mydb; sleep 2; done"]
+# If you add a configmap you must add a volume names "configmap" to mount to a path of your choosing
+# you can also mount arbitrary volumes or otherwise leave as an empty array
+volumeMounts: []
+#volumeMounts:
+#  - name: configmap
+#    path: /etc/config
+
+#  - name: cache-dir
+#    path: /etc/cache
+#  - name: test-volume
+#    path: /etc/gce-pd
+
+#startupProbe:
+#  httpGet:
+#    path: /
+#    port: 8080
+
+livenessProbe:
+  
+  httpGet:
+    path: /greeting 
+    port: 8080
+  initialDelaySeconds: 120
+  timeoutSeconds: 30
+  periodSeconds: 30
+  successThreshold: 1
+  failureThreshold: 3
+ 
+readinessProbe:
+  
+  httpGet:
+    path: /greeting
+    port: 8080
+  initialDelaySeconds: 120
+  timeoutSeconds: 30
+  periodSeconds: 30
+  successThreshold: 1
+  failureThreshold: 3
+
+
+# Volume mounts should have an equivelent volume name defined of required type
+# this example creates and emptyDir type volume for ephemeral data
+# volumes: |
+#   - name: cache-dir
+#     emptyDir: {}
+#   - name: test-volume
+    # This GCE PD must already exist.
+#     gcePersistentDisk:
+#      pdName: my-data-disk
+#      fsType: ext4
+
+# Mount precreated secrets to a volume, it is determined the helm chart should not create secrets
+# to protect security.  Please do not store secret data such as keys, keystores or passwords in Git
+# or in a configmap
+secretMounts: []
+#secretMounts:
+#  - name: keystores
+#    secretName: app-keystores
+#    path: /etc/secrets/keystores
+
+
+image:
+  repository: northamerica-northeast1-docker.pkg.dev/cio-gke-devops-e4993356/applications/cio-creditmgmt/creditmgmt-asmt-migt-svc
+  tag: latest
+  pullPolicy: Always # IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+
+#The Nginx ingress is depricated and teams should user Kong Primavera as the application web ingress.
+ingress:
+  enabled: false
+  path: /bto-react-example/react/?(.*)
+  hosts:
+    - ""
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+  class: nginx-ingress-protected
+
+ # Can disable modsecurity rule 949110 via annotation below to prevent 403 errors common in either of the following cases:
+ #    - You wish to allow PUT/DELETE HTTP methods
+ #    - Consumers must make repeated requests, to prevent "Inbound Anomaly Score Exceeded" (ie React UIs).
+
+ #annotations:
+ #nginx.ingress.kubernetes.io/modsecurity-snippet: SecRuleRemoveByID 949110
+
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #  cpu: 100m
+  #  memory: 128Mi
+  # requests:
+  #  cpu: 100m
+  #  memory: 128Mi
+
+# We recommend not specifying any strategy, the default strategy will be applied of RollingUpdate
+# with maxSurge:25% and maxUnavailable:25%.  If you wish to change these values or change
+# the strategy to Recreate then uncomment the following lines and adjust as necessary.
+#strategy:
+#  type: RollingUpdate
+#  rollingUpdate:
+#    maxSurge: 25%
+#    maxUnavailable: 25%
+
+# enable autoscaling and set utilization targets.  For autoscaling on cpu/memeory to work you
+# must set resource limits
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 50
+  targetMemoryUtilizationPercentage: 75
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+
+#Uncomment the snippet of values below to implement CloudSQL proxy for your implementation
+#This sidecar implementation would effectively allow you to access your instance host with 'localhost'
+cloudsqlproxy:
+ enabled: true
+ version: "1.29.0"
+ instance_connection: cio-creditmgmt-np-15dfbe:northamerica-northeast1:cio-creditmgmt-db-np 
+ options: [ "-log_debug_stdout=true", "-structured_logs=true" ]
+
+
+## Configure arbitrary additional(sidecar) containers
+# sideCarContainers:
+#   datadog:
+#     image: datadog/agent:latest
+#     env:
+#       - name: DD_API_KEY
+#         value: ASDF-1234
+#       - name: SD_BACKEND
+#         value: docker
+sideCarContainers: {}
+
+prometheus:
+  enable: false
+  scrapePath: "/metrics"
+  scrapePort: 8080
+
+## Configure PodMonitoring resource to have Managed Prometheus to scrap application metric for view in Cloud Monitoring
+## https://cloud.google.com/stackdriver/docs/managed-prometheus/setup-managed#gmp-pod-monitoring
+podmonitoring:
+  enabled: false
+  interval: 30s
+  path: "/metrics"
+  port: 8080
+
+## Important this section configures the GKE side for workload identity support.  Make sure
+## the Terraform side is also completed.  Read more about it at the link below
+## https://github.com/telus/tf-module-gcp-workload-identity
+rbac:
+  create: true 
+  serviceAccountAnnotations: {
+    iam.gke.io/gcp-service-account: "creditmgmt-gsa@cio-creditmgmt-np-15dfbe.iam.gserviceaccount.com"   ## <-- Created from the TF module   
+    ,foo: "bar"
+    }   
+  serviceAccountName: "creditmgmt-ksa"   ## <-- This kubernetes service account will be created during the deployment - note it's the same ksa specified in the TF module
+serviceAccount: creditmgmt-ksa

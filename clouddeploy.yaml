@@ -1,0 +1,153 @@
+apiVersion: deploy.cloud.google.com/v1
+kind: DeliveryPipeline
+metadata:
+ name: creditmgmt-asmt-migt-svc
+ annotations: {}
+ labels: {}
+description: CICD deploy pipeline
+serialPipeline:
+ stages: 
+ - targetId: np
+   profiles: [np] #Skaffold profile names, from skaffold.yaml 
+ - targetId: it01-np
+   profiles: [it01-np]    
+ - targetId: it02-np
+   profiles: [it02-np] 
+ - targetId: it03-np
+   profiles: [it03-np]       
+ - targetId: it04-np
+   profiles: [it04-np]
+ - targetId: pr
+   profiles: [pr]  
+---
+apiVersion: deploy.cloud.google.com/v1
+kind: Target
+metadata:
+ name: np
+ annotations: {}
+ labels: {}
+description: np/dev environment
+requireApproval: false
+gke:
+ cluster:  projects/cdo-gke-private-np-1a8686/locations/northamerica-northeast1/clusters/private-na-ne1-001
+ internalIp: true
+executionConfigs:
+- privatePool:
+    workerPool: projects/cdo-cloud-build-pools-np-1c2f/locations/northamerica-northeast1/workerPools/private-pool-e2-standard-8
+    serviceAccount: cicd-service-account@cio-creditmgmt-np-15dfbe.iam.gserviceaccount.com
+  usages:
+  - DEPLOY
+- defaultPool:
+    serviceAccount: cicd-service-account@cio-creditmgmt-np-15dfbe.iam.gserviceaccount.com
+  usages:
+  - RENDER
+---
+apiVersion: deploy.cloud.google.com/v1
+kind: Target
+metadata:
+ name: it01-np
+ annotations: {}
+ labels: {}
+description: it01-np environment
+requireApproval: false
+gke:
+ cluster:  projects/cdo-gke-private-np-1a8686/locations/northamerica-northeast1/clusters/private-na-ne1-001
+ internalIp: true
+executionConfigs:
+- privatePool:
+    workerPool: projects/cdo-cloud-build-pools-np-1c2f/locations/northamerica-northeast1/workerPools/private-pool-e2-standard-8
+    serviceAccount: cicd-service-account@cio-creditmgmt-np-15dfbe.iam.gserviceaccount.com
+  usages:
+  - DEPLOY
+- defaultPool:
+    serviceAccount: cicd-service-account@cio-creditmgmt-np-15dfbe.iam.gserviceaccount.com
+  usages:
+  - RENDER 
+---
+apiVersion: deploy.cloud.google.com/v1
+kind: Target
+metadata:
+ name: it02-np
+ annotations: {}
+ labels: {}
+description: it02-np environment
+requireApproval: false
+gke:
+ cluster:  projects/cdo-gke-private-np-1a8686/locations/northamerica-northeast1/clusters/private-na-ne1-001
+ internalIp: true
+executionConfigs:
+- privatePool:
+    workerPool: projects/cdo-cloud-build-pools-np-1c2f/locations/northamerica-northeast1/workerPools/private-pool-e2-standard-8
+    serviceAccount: cicd-service-account@cio-creditmgmt-np-15dfbe.iam.gserviceaccount.com
+  usages:
+  - DEPLOY
+- defaultPool:
+    serviceAccount: cicd-service-account@cio-creditmgmt-np-15dfbe.iam.gserviceaccount.com
+  usages:
+  - RENDER   
+---
+apiVersion: deploy.cloud.google.com/v1
+kind: Target
+metadata:
+ name: it03-np
+ annotations: {}
+ labels: {}
+description: it02-np environment
+requireApproval: false
+gke:
+ cluster:  projects/cdo-gke-private-np-1a8686/locations/northamerica-northeast1/clusters/private-na-ne1-001
+ internalIp: true
+executionConfigs:
+- privatePool:
+    workerPool: projects/cdo-cloud-build-pools-np-1c2f/locations/northamerica-northeast1/workerPools/private-pool-e2-standard-8
+    serviceAccount: cicd-service-account@cio-creditmgmt-np-15dfbe.iam.gserviceaccount.com
+  usages:
+  - DEPLOY
+- defaultPool:
+    serviceAccount: cicd-service-account@cio-creditmgmt-np-15dfbe.iam.gserviceaccount.com
+  usages:
+  - RENDER 
+---
+apiVersion: deploy.cloud.google.com/v1
+kind: Target
+metadata:
+ name: it04-np
+ annotations: {}
+ labels: {}
+description: Staging environment
+requireApproval: false
+gke:
+ cluster:  projects/cdo-gke-private-np-1a8686/locations/northamerica-northeast1/clusters/private-na-ne1-001
+ internalIp: true
+executionConfigs:
+- privatePool:
+    workerPool: projects/cdo-cloud-build-pools-np-1c2f/locations/northamerica-northeast1/workerPools/private-pool-e2-standard-8
+    serviceAccount: cicd-service-account@cio-creditmgmt-np-15dfbe.iam.gserviceaccount.com
+  usages:
+  - DEPLOY
+- defaultPool:
+    serviceAccount: cicd-service-account@cio-creditmgmt-np-15dfbe.iam.gserviceaccount.com
+  usages:
+  - RENDER
+---
+apiVersion: deploy.cloud.google.com/v1
+kind: Target
+metadata:
+ name: pr
+ annotations: {}
+ labels: {}
+description: Production environment
+requireApproval: true
+gke:
+ cluster:  projects/cdo-gke-private-pr-7712d7/locations/northamerica-northeast1/clusters/private-na-ne1-001
+ internalIp: true
+executionConfigs:
+- privatePool:
+    workerPool: projects/cdo-cloud-build-pools-pr-503e/locations/northamerica-northeast1/workerPools/private-pool-e2-standard-8
+    serviceAccount: cicd-service-account@cio-creditmgmt-np-15dfbe.iam.gserviceaccount.com
+  usages:
+  - DEPLOY
+- defaultPool:
+    serviceAccount: cicd-service-account@cio-creditmgmt-np-15dfbe.iam.gserviceaccount.com
+  usages:
+  - RENDER

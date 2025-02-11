@@ -1,0 +1,308 @@
+# This workflow is based on sample from the Engineering Productivity team. 
+# Deploy an application to Google Kubernetes Engine using Cloud Deploy.
+# You must have enabled GitHub Actions for your Google Cloud Project as part of the cloud onboarding process to use this workflow.
+name: Deploy workflow 
+on:
+
+  workflow_dispatch:
+    branches: develop
+    inputs:
+      ENV:
+        type: choice
+        description: Select the QA env assigned for the changes.
+        options: 
+        - it01-np
+        - it02-np
+        - it03-np  
+  # run when someone pushes a tag .
+  push:
+    tags:
+      - creditmgmt-asmt-mig.v* 
+      
+# Only one instance of the pipeline can be run at any time
+concurrency: 
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+ 
+ # Pipeline environment variables
+env:
+  # Your Google Cloud Non-Prod Project
+  PROJECT_ID: cio-creditmgmt-np-15dfbe
+  
+  # Your Cloud Deploy pipeline name, as defined in clouddeploy.yaml metadata.name for kind:DeliveryPipeline
+  DELIVERY_PIPELINE_NAME: creditmgmt-asmt-migt-svc
+    
+  # The Google Cloud Region where you want to deploy; you likely don't have to change this
+  REGION: northamerica-northeast1
+  
+jobs:
+  cloud-build-deploy-dev:
+    name: cloud-build-deploy-dev
+    runs-on: [ubuntu-latest]
+    outputs:
+      releasetag: ${{ steps.release.outputs.new_tag }}
+      repotag: ${{ steps.tagging.outputs.new_tag }}    
+    permissions:
+      contents: 'write'
+      pull-requests: 'write'
+      id-token: 'write'
+    steps:
+    
+      - name: Deployment via assigned QA env ${{ github.event.inputs.ENV }}     
+        run: echo ">>>>>>>>>>>>>>>>>>>>>>>pipeline from dv to ${{ github.event.inputs.ENV }} environments <<<<<<<<<<<<<<<<<<<<<<<"
+
+      # Check out your GitHub repo into the container executing these steps
+      - name: "Cloning repo"
+        uses: actions/checkout@v3
+      
+      # This action follows Semver and automatically bumps your version according to your commit history
+      - id: tagging
+        uses: mathieudutour/github-tag-action@v6.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      # We reformat it to match Cloud Deploy's naming convention
+      - name: "Reformat TAG"
+        id: release
+        run: echo "::set-output name=new_tag::`echo ${TAG//./-} | awk '{print tolower($0)}'`"
+        env: 
+          TAG: ${{ steps.tagging.outputs.new_tag }}
+      # Authenticate to the Google Cloud platform using Workload Identity Federation, the most secure and preferred
+      # way to connect to our Google Cloud Platform from GitHub.
+      # The workload_identity_provider is managed for the entire cluster and you don't need to worry about it.
+      # The service_account must be setup within your Google Project. This is done by the Cloud CoE as part of
+      # project onboarding, so you don't need to worry about it beyond enabling GitHub actions as part of your
+      # Google Cloud project onboarding request.
+      - name: Authenticate to Google using WIF
+        id: auth 
+        uses: google-github-actions/auth@v0
+        with:
+          workload_identity_provider: ${{ secrets.CDO_WORKLOAD_IDENTITY_PROVIDER_GCP }} 
+          service_account:  'cicd-service-account@${{ env.PROJECT_ID }}.iam.gserviceaccount.com'
+          project_id:  ${{ env.PROJECT_ID }}
+          token_format: 'access_token'
+      
+      
+      # Setup Maven to build application first
+      - name: Set up Apache Maven Central
+        uses: actions/setup-java@v1
+        with: # running setup-java again overwrites the settings.xml
+          java-version: 1.8
+          server-id: artifact-registry # Value of the distributionManagement/repository/id field of the pom.xml
+      
+      - name: Maven Buiild jar file
+        run: mvn -Dmaven.test.skip=true clean package
+      
+
+      # The GCloud CLI must be installed and configured in the container to enable subsequent steps
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v0
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          install_components: 'skaffold'
+
+      # Configure docker authorization for access to the Google Artifact Registry
+      - name: Configure Docker
+        run: |-
+          gcloud --quiet auth configure-docker northamerica-northeast1-docker.pkg.dev
+          
+      #  Register a delivery pipeline. Set up Cloud Deploy in your project following the definition in your clouddeploy.yaml file
+      - name: Create or update Cloud Deploy Pipeline
+        run: |-
+          gcloud deploy apply --file clouddeploy.yaml --region $REGION --project $PROJECT_ID
+          
+      # Build your application image following the specified profile as defined in your skaffold.yaml file
+      - name: Skaffold build
+        run: |-
+          skaffold build --file-output artifacts.json --tag $TAG 
+        env:
+          TAG: ${{ steps.release.outputs.new_tag }}
+      # Initiate deployment following the pipeline definition from your clouddeploy.yaml file
+      - name: Create release
+        run: |-
+          gcloud deploy releases create ${RELEASE_NAME//./-} \
+            --delivery-pipeline=$DELIVERY_PIPELINE_NAME \
+            --region=$REGION \
+            --images=cio-creditmgmt/creditmgmt-asmt-migt-svc=northamerica-northeast1-docker.pkg.dev/cio-gke-devops-e4993356/applications/cio-creditmgmt/creditmgmt-asmt-migt-svc:$TAG \
+            --to-target='np'
+        env:        
+          RELEASE_NAME: release-${{steps.release.outputs.new_tag }} 
+          TAG: ${{ steps.release.outputs.new_tag }}
+
+      # Continually poll Cloud Deploy to check on the status of your deployment and pull results back into GitHub
+      - name: Check status
+        id: status_check_dev
+        uses: 'telus/cdo-actions-cloud-deploy-rollout-status@v1'
+        with:
+          delivery_pipeline: ${{env.DELIVERY_PIPELINE_NAME }}
+          release_name: release-${{ steps.release.outputs.new_tag }} 
+          target_id: 'np'
+   
+  testAutomation:
+    name: API Integration Testing  in dv env.
+    needs: [cloud-build-deploy-dev]
+    runs-on: [ubuntu-latest]
+    permissions:
+      contents: 'write'
+      pull-requests: 'write'
+      id-token: 'write'
+    steps:
+      # Print Message
+      - name: "executing job testAutomation"
+        run: echo ">>>>>>>>>>>>>>>>>>>>>>>executing job testAutomation <<<<<<<<<<<<<<<<<<<<<<<"
+ 
+  cloud-deploy-itx:
+  
+    name: cloud-deploy-to-${{ github.event.inputs.ENV }}
+    needs: [cloud-build-deploy-dev,testAutomation]
+    runs-on: [ubuntu-latest]
+    permissions:
+      contents: 'write'
+      pull-requests: 'write'
+      id-token: 'write'
+    steps:
+      # Print Message
+      - name: "executing job cloud-deploy-itx"
+        run: echo ">>>>>>>>>>>>>>>>>>>>>>>executing job cloud-deploy-to-${{ github.event.inputs.ENV }} <<<<<<<<<<<<<<<<<<<<<<<"
+
+      - id: auth
+        name: Authenticate to Google using WIF
+        uses: google-github-actions/auth@v0
+        with:
+          workload_identity_provider: ${{ secrets.CDO_WORKLOAD_IDENTITY_PROVIDER_GCP }} 
+          service_account:  'cicd-service-account@${{ env.PROJECT_ID }}.iam.gserviceaccount.com'
+          project_id:  ${{ env.PROJECT_ID }}
+          token_format: 'access_token'  
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v0
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      # Continue to it0x if release is successful
+      - name: Promote Release to ${{ github.event.inputs.ENV }}
+        id: "promote_release_itx"
+        uses: "telus/cdo-actions-cloud-deploy@v1"
+        with:
+          action: "promote-release"
+          delivery_pipeline: ${{ env.DELIVERY_PIPELINE_NAME }}
+          release_name: release-${{ needs.cloud-build-deploy-dev.outputs.releasetag }}        
+          target_id: "${{ github.event.inputs.ENV }}"
+                    
+      # Continually poll Cloud Deploy to check on the status of your deployment to staging and pull results back into GitHub
+      - name: Check ${{ github.event.inputs.ENV }} deployment status
+        id: status_check_itx
+        uses: "telus/cdo-actions-cloud-deploy-rollout-status@v1"
+        with:
+          delivery_pipeline: ${{ env.DELIVERY_PIPELINE_NAME }}
+          release_name: release-${{ needs.cloud-build-deploy-dev.outputs.releasetag }}  
+          target_id: "${{ github.event.inputs.ENV }}" 
+          
+  cloud-deploy-st_it04:
+    needs: [cloud-deploy-itx,cloud-build-deploy-dev]
+    name: cloud-deploy-st_it04
+    runs-on: [ubuntu-latest]
+    environment: staging
+    permissions:
+      contents: 'write'
+      pull-requests: 'write'
+      id-token: 'write'  
+    steps:
+      # Print Message
+      - name: "PrintMessage"
+        run: echo ">>>>>>>>>>>>>>>>>>>>>>>executing job cloud-deploy-to-st_it04 <<<<<<<<<<<<<<<<<<<<<<<"
+        
+      - id: auth
+        name: Authenticate to Google using WIF
+        uses: google-github-actions/auth@v0
+        with:
+          workload_identity_provider: ${{ secrets.CDO_WORKLOAD_IDENTITY_PROVIDER_GCP }} 
+          service_account:  'cicd-service-account@${{ env.PROJECT_ID }}.iam.gserviceaccount.com'
+          project_id:  ${{ env.PROJECT_ID }}
+          token_format: 'access_token'  
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v0
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+
+      # Initiate deployment following the pipeline definition from your clouddeploy.yaml file
+      - name: Promote release to it04-np
+        run: |-
+          gcloud deploy releases promote --release=${RELEASE_NAME} \
+            --delivery-pipeline=$DELIVERY_PIPELINE_NAME \
+            --region=$REGION \
+            --to-target='it04-np'
+        env:        
+          RELEASE_NAME: release-${{ needs.cloud-build-deploy-dev.outputs.releasetag }} 
+          TAG: ${{ needs.cloud-build-deploy-dev.outputs.releasetag }} 
+
+      # Continually poll Cloud Deploy to check on the status of your deployment and pull results back into GitHub
+      - name: Check it04-np status
+        id: st_status_check
+        uses: 'telus/cdo-actions-cloud-deploy-rollout-status@v1'
+        with:
+          delivery_pipeline: ${{env.DELIVERY_PIPELINE_NAME }}
+          release_name: release-${{ needs.cloud-build-deploy-dev.outputs.releasetag }} 
+          target_id: 'it04-np'
+
+ 
+ # Continue to production
+  cloud-deploy-production:
+    name: cloud-deploy-to-production
+    needs: [cloud-deploy-st_it04,cloud-build-deploy-dev]
+    runs-on: [ubuntu-latest]
+    environment: production
+    permissions:
+      contents: 'write'
+      pull-requests: 'write'
+      id-token: 'write'
+    steps:
+      # Print Message
+      - name: "cloud-deploy-production"
+        run: echo ">>>>>>>>>>>>>>>>>>>>>>>executing job cloud-deploy-production <<<<<<<<<<<<<<<<<<<<<<<"
+
+      - id: auth
+        name: Authenticate to Google using WIF
+        uses: google-github-actions/auth@v0
+        with:
+          workload_identity_provider: ${{ secrets.CDO_WORKLOAD_IDENTITY_PROVIDER_GCP }} 
+          service_account:  'cicd-service-account@${{ env.PROJECT_ID }}.iam.gserviceaccount.com'
+          project_id:  ${{ env.PROJECT_ID }}
+          token_format: 'access_token'  
+
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v0
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+
+      # Initiate deployment following the pipeline definition from your clouddeploy.yaml file
+      - name: Promote release to Production
+        run: |-
+          gcloud deploy releases promote --release=${RELEASE_NAME} \
+            --delivery-pipeline=$DELIVERY_PIPELINE_NAME \
+            --region=$REGION \
+            --to-target='pr'
+        env:        
+          RELEASE_NAME: release-${{ needs.cloud-build-deploy-dev.outputs.releasetag }} 
+          TAG: ${{ needs.cloud-build-deploy-st.outputs.releasetag }} 
+
+
+      # Continually poll Cloud Deploy to check on the status of your deployment and pull results back into GitHub
+      - name: Check pr status
+        id: pr_status_check
+        uses: 'telus/cdo-actions-cloud-deploy-rollout-status@v1'
+        with:
+          delivery_pipeline: ${{env.DELIVERY_PIPELINE_NAME }}
+          release_name: release-${{ needs.cloud-build-deploy-dev.outputs.releasetag }} 
+          target_id: 'pr'        
+      
+      - name: Production Check
+        if: steps.status_check_pr.outputs.status == 'FAILED'
+        run: |
+          echo "Exiting because deploying to Production failed!"
+          exit 1
+  

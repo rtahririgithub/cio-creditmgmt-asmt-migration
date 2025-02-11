@@ -1,0 +1,73 @@
+# Sample workflow from the Engineering Productivity team.
+# Roll back to the last successful deployment for the specified target environment using Cloud Deploy.
+# You must have enabled GitHub Actions for your Google Cloud Project as part of the cloud onboarding process to use this workflow.
+name: Rollback Workflow
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        required: true
+        type: choice
+        description: Target environment to rollback to.
+        options: 
+        - np        
+        - it01-np
+        - it02-np
+        - it03-np         
+        - it04-np       
+        - pr
+
+env:
+  # Your Google Cloud Non-Prod Project
+  PROJECT_ID: cio-creditmgmt-np-15dfbe
+  
+  # Your Cloud Deploy pipeline name, as defined in clouddeploy.yaml metadata.name for kind:DeliveryPipeline
+  DELIVERY_PIPELINE_NAME: creditmgmt-asmt-migt-svc
+  
+  # The Google Cloud Region where you want to do the rollback; you likely don't have to change this
+  REGION: northamerica-northeast1
+  
+jobs:
+  cloud-deploy:
+    name: cloud deploy
+    runs-on: [ubuntu-latest]
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    steps:
+    
+      - name: Target environment to rollback to  ${{ github.event.inputs.target }}     
+        run: echo ">>>>>>>>>>>>>>>>>>>>>>>Target environment to rollback to ${{ github.event.inputs.target }} environments <<<<<<<<<<<<<<<<<<<<<<<"
+
+
+      # Check out your GitHub repo into the container executing these steps
+      - name: "Clonning repo"
+        uses: actions/checkout@v3
+      
+      # Authenticate to the Google Cloud platform using Workload Identity Federation, the most secure and preferred
+      # way to connect to our Google Cloud Platform from GitHub.
+      # The workload_identity_provider is managed for the entire cluster and you don't need to worry about it.
+      # The service_account must be setup within your Google Project. This is done by the Cloud CoE as part of
+      # project onboarding, so you don't need to worry about it beyond enabling GitHub actions as part of your
+      # Google Cloud project onboarding request.
+      - id: auth
+        name: Authenticate to Google using WIF
+        uses: google-github-actions/auth@v0
+        with:
+          workload_identity_provider: ${{ secrets.CDO_WORKLOAD_IDENTITY_PROVIDER_GCP }}
+          service_account: 'cicd-service-account@${{ env.PROJECT_ID }}.iam.gserviceaccount.com'
+          project_id: ${{ env.PROJECT_ID }}
+          token_format: 'access_token'
+          
+      # The GCloud CLI must be installed and configured in the container to enable subsequent steps
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v0
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          install_components: 'skaffold'
+          
+      # Execute GCloud command to issue rollback via Google Cloud Deploy
+      # Cloud Deploy tracks what the last successful deployment was for the target, so you don't need to specify a particular image
+      - name: Rollback to last successful release
+        run: |-
+          gcloud deploy targets rollback ${{ inputs.target }} --delivery-pipeline=${{ env.DELIVERY_PIPELINE_NAME }} --region=${{ env.REGION }}
